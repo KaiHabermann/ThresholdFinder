@@ -3,6 +3,7 @@ import argparse
 import sys
 
 from .finder import ThresholdFinder
+from .flavor import FlavorFilter, FLAVORS
 
 
 def parse_parity(s: str) -> int:
@@ -44,7 +45,27 @@ def main(argv=None):
         help="Max mass (MeV) for individual particles to consider (default: mass_max)",
     )
 
+    flavor_group = parser.add_argument_group(
+        "flavor conservation",
+        "Constrain the net quark content of the two-particle system. "
+        "Each flag takes an integer (net quark number = #quark - #antiquark). "
+        "Only the flags you provide are enforced; omitted flavors are unconstrained.",
+    )
+    for f in FLAVORS:
+        flavor_group.add_argument(
+            f"--{f}", type=int, default=None, metavar="N",
+            help=f"Required net {f}-quark number of the pair",
+        )
+
     args = parser.parse_args(argv)
+
+    flavor_filter = FlavorFilter(
+        u=args.u,
+        d=args.d,
+        s=args.s,
+        c=args.c,
+        b=args.b,
+    )
 
     finder = ThresholdFinder(
         mass_min=args.mass_min,
@@ -53,6 +74,7 @@ def main(argv=None):
         P_target=args.P,
         max_L=args.max_L,
         total_charge=args.charge,
+        flavor_filter=flavor_filter,
         status_filter=tuple(args.status),
     )
 

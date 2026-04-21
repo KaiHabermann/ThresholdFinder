@@ -8,6 +8,8 @@ from typing import Optional
 from particle import Particle
 from particle.pdgid import is_hadron
 
+from .flavor import parse_quark_content
+
 
 @dataclass(frozen=True)
 class ParticleInfo:
@@ -18,6 +20,7 @@ class ParticleInfo:
     P: int
     pdgid: int
     is_self_conjugate: bool
+    quark_content: Optional[dict[str, int]]  # net quark numbers; None for mixed states
 
     @property
     def antiparticle_pdgid(self) -> int:
@@ -60,6 +63,7 @@ def load_hadrons(
         seen_pairs.add(pair)
 
         is_self_conj = (pdgid == anti_id) or (p.invert().pdgid == p.pdgid)
+        qc = parse_quark_content(p.quarks) if p.quarks else None
 
         result.append(ParticleInfo(
             name=p.name,
@@ -69,6 +73,7 @@ def load_hadrons(
             P=int(p.P),
             pdgid=pdgid,
             is_self_conjugate=is_self_conj,
+            quark_content=qc,
         ))
 
     return result
@@ -92,6 +97,7 @@ def get_particle_pairs(
             try:
                 anti = Particle.from_pdgid(-p.pdgid)
                 if anti.mass is not None:
+                    anti_qc = parse_quark_content(anti.quarks) if anti.quarks else None
                     full.append(ParticleInfo(
                         name=anti.name,
                         mass=float(anti.mass),
@@ -100,6 +106,7 @@ def get_particle_pairs(
                         P=int(anti.P),
                         pdgid=int(anti.pdgid),
                         is_self_conjugate=False,
+                        quark_content=anti_qc,
                     ))
             except Exception:
                 pass

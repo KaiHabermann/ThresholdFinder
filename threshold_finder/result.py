@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .flavor import FlavorFilter
+
 
 @dataclass(frozen=True)
 class CombinationResult:
@@ -41,13 +43,16 @@ class ThresholdResult:
     mass_min: float       # MeV
     mass_max: float       # MeV
     max_L: Optional[int]
+    flavor_filter: FlavorFilter = field(default_factory=FlavorFilter)
     combinations: list[CombinationResult] = field(default_factory=list)
 
     def __str__(self) -> str:
+        flavor_str = f"  flavor: {self.flavor_filter}" if not self.flavor_filter.is_empty() else ""
         lines = [
             f"Thresholds for J^P = {self.J_target:.0f}^{'+' if self.P_target > 0 else '-'}  "
             f"in [{self.mass_min:.1f}, {self.mass_max:.1f}] MeV"
-            f"  (max L = {'∞' if self.max_L is None else self.max_L})",
+            f"  (max L = {'∞' if self.max_L is None else self.max_L})"
+            f"{flavor_str}",
             f"Found {len(self.combinations)} combination(s):",
         ]
         for c in sorted(self.combinations, key=lambda x: (x.threshold, x.L)):
