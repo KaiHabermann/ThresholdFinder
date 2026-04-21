@@ -16,7 +16,7 @@ pip install thresholds
 ### Command line
 
 ```
-python3 -m threshold_finder.cli mass_min mass_max J P [options]
+threshold-finder mass_min mass_max J P [options]
 ```
 
 **Positional arguments:**
