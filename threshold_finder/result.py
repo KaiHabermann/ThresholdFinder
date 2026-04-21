@@ -4,6 +4,14 @@ from typing import Optional
 from .flavor import FlavorFilter
 
 
+def _fmt_J(j: float) -> str:
+    """Format J as '1', '2', '1/2', '3/2', etc."""
+    twice = round(j * 2)
+    if twice % 2 == 0:
+        return str(twice // 2)
+    return f"{twice}/2"
+
+
 @dataclass(frozen=True)
 class CombinationResult:
     particle1: str
@@ -32,7 +40,7 @@ class CombinationResult:
             f"{self.particle1} + {self.particle2}{same}  "
             f"threshold={self.threshold:.1f} MeV  "
             f"L={self.L}  "
-            f"J^P={self.J_total:.0f}^{'+' if self.P_total > 0 else '-'}"
+            f"J^P={_fmt_J(self.J_total)}^{'+' if self.P_total > 0 else '-'}"
         )
 
 
@@ -49,7 +57,7 @@ class ThresholdResult:
     def __str__(self) -> str:
         flavor_str = f"  flavor: {self.flavor_filter}" if not self.flavor_filter.is_empty() else ""
         lines = [
-            f"Thresholds for J^P = {self.J_target:.0f}^{'+' if self.P_target > 0 else '-'}  "
+            f"Thresholds for J^P = {_fmt_J(self.J_target)}^{'+' if self.P_target > 0 else '-'}  "
             f"in [{self.mass_min:.1f}, {self.mass_max:.1f}] MeV"
             f"  (max L = {'∞' if self.max_L is None else self.max_L})"
             f"{flavor_str}",
