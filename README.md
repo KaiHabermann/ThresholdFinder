@@ -8,7 +8,7 @@ Finds two-body hadronic thresholds compatible with given J^P quantum numbers. Gi
 - [`particle`](https://github.com/scikit-hep/particle) >= 0.24
 
 ```bash
-pip install particle
+pip install thresholds
 ```
 
 ## Usage

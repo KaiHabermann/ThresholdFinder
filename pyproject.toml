@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "threshold-finder"
+name = "thresholds"
 version = "0.1.0"
 description = "Find two-body hadronic thresholds compatible with given J^P quantum numbers"
 readme = "README.md"

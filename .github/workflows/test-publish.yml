@@ -1,9 +1,8 @@
 name: Test Publish to TestPyPI
 
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
   workflow_dispatch: {}
 
 jobs:
@@ -43,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/threshold-finder
+      url: https://test.pypi.org/p/thresholds
     permissions:
       id-token: write
     steps:
