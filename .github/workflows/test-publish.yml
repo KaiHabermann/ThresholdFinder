@@ -4,44 +4,54 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch: {}
 
 jobs:
-  build-and-verify:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.x"
+
+      - name: Set up pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: ${{ runner.os }}-pip-
 
       - name: Build distributions
         run: |
           pip install build
           python -m build
 
-      - name: Verify distributions with twine
+      - name: Verify with twine
         run: |
           pip install twine
-          twine check dist/*
+          twine check --strict dist/*
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: python-package-distributions
           path: dist/
 
   publish-testpypi:
-    needs: build-and-verify
+    needs: build
     runs-on: ubuntu-latest
-    environment: testpypi
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/threshold-finder
     permissions:
       id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: dist
+          name: python-package-distributions
           path: dist/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: https://upload.test.pypi.org/legacy/
+          repository-url: https://test.pypi.org/legacy/
