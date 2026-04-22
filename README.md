@@ -39,15 +39,18 @@ threshold-finder mass_min mass_max J P [options]
 
 **Flavor conservation flags** (all optional, independent):
 
-| Flag      | Description |
-|-----------|-------------|
-| `--u N`   | Required net u-quark number of the pair (#u − #ū) |
-| `--d N`   | Required net d-quark number of the pair (#d − #d̄) |
-| `--s N`   | Required net s-quark number of the pair (#s − #s̄) |
-| `--c N`   | Required net charm of the pair (#c − #c̄) |
-| `--b N`   | Required net bottomness of the pair (#b − #b̄) |
+| Flag                     | Description |
+|--------------------------|-------------|
+| `--u N`                  | Required net u-quark number of the pair (#u − #ū) |
+| `--d N`                  | Required net d-quark number of the pair (#d − #d̄) |
+| `--s N`                  | Required net s-quark number of the pair (#s − #s̄) |
+| `--c N`                  | Required net charm of the pair (#c − #c̄) |
+| `--b N`                  | Required net bottomness of the pair (#b − #b̄) |
+| `--particles P1 P2`      | Derive all flavor numbers automatically from two PDG particle names |
 
 Only the flags you provide are enforced. Omit a flag to leave that flavor unconstrained. Pairs involving particles with undefined quark content (e.g. η, ω — mixed states like uū+dd̄) are excluded when any flavor flag is set.
+
+`--particles` is a shorthand: instead of computing net quark numbers by hand, provide the two particles whose quantum numbers define the channel of interest. The flavor flags are derived automatically and printed before the results. Explicit `--u/--d/...` flags override the derived values if both are given.
 
 ### Examples
 
@@ -96,6 +99,61 @@ $ python3 -m threshold_finder.cli 3700 3900 1 -1 --u 0 --d 0 --s 0 --c 0 --b 0 -
   ...
   D0 + D*(2007)~0  threshold=3871.7 MeV  L=1  J^P=1^-
   ...
+```
+
+Derive flavor numbers from reference particles (D0 + Lambda defines the channel):
+
+```
+$ threshold-finder 2800 3000 0.5 -1 --particles 'D0' 'Lambda' --unique-pairs
+
+Flavor conservation derived from 'D0' + 'Lambda':
+  u = +0
+  d = +1
+  s = +1
+  c = +1
+
+Thresholds for J^P = 1/2^-  in [2800.0, 3000.0] MeV  (max L = ∞)  flavor: u=+0, d=+1, s=+1, c=+1
+Found 5 combination(s):
+  pi- + Xi(c)(2790)+  threshold=2931.5 MeV  L=1  J^P=1/2^-
+  K- + Sigma(c)(2455)+  threshold=2946.3 MeV  L=0  J^P=1/2^-
+  ...
+```
+
+If the reference threshold is outside the search range, a warning is printed but the search still runs:
+
+```
+$ threshold-finder 2500 2800 0.5 -1 --particles 'D0' 'Lambda' --unique-pairs
+
+WARNING: threshold of D0 + Lambda = 2980.5 MeV is above mass_max = 2800.0 MeV
+Flavor conservation derived from 'D0' + 'Lambda':
+  ...
+```
+
+If a particle has ambiguous quark content (mixed state), the tool reports what could be determined and prints a ready-to-edit command with `???` placeholders for the unknown flavors:
+
+```
+$ threshold-finder 2800 3000 0.5 -1 --particles 'eta' 'Lambda'
+
+ERROR: Quark content is ambiguous (mixed/superposition state) for:
+  eta  (PDG quarks string: 'x(uU+dD)+y(sS)')
+Determined from ['Lambda']: d=+1, s=+1, u=+1
+
+Set the remaining flavor flags manually. Example command:
+  threshold-finder 2800.0 3000.0 0.5 -1 --u 1 --d 1 --s 1 --c ??? --b ???
+```
+
+If a particle name is not found, 5 suggestions are printed as ready-to-run commands:
+
+```
+$ threshold-finder 2800 3000 0.5 -1 --particles 'D0' 'Lmabda'
+
+ERROR: Unknown particle 'Lmabda'
+Did you mean one of these?
+  threshold-finder 2800.0 3000.0 0.5 -1 --particles 'D0' 'Lambda'
+  threshold-finder 2800.0 3000.0 0.5 -1 --particles 'D0' 'Lambda~'
+  threshold-finder 2800.0 3000.0 0.5 -1 --particles 'D0' 'Lambda(c)+'
+  threshold-finder 2800.0 3000.0 0.5 -1 --particles 'D0' 'Lambda(b)0'
+  threshold-finder 2800.0 3000.0 0.5 -1 --particles 'D0' 'Lambda(1520)'
 ```
 
 Find 2⁺ channels with threshold 500–700 MeV, restricting to L ≤ 2:
