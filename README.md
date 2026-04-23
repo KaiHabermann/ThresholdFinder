@@ -16,7 +16,7 @@ pip install thresholds
 ### Command line
 
 ```
-threshold-finder mass_min mass_max J P [options]
+threshold-finder mass_min mass_max [J P] [options]
 ```
 
 **Positional arguments:**
@@ -25,8 +25,10 @@ threshold-finder mass_min mass_max J P [options]
 |------------|--------------------------------------------------|
 | `mass_min` | Lower bound of the threshold search range (MeV)  |
 | `mass_max` | Upper bound of the threshold search range (MeV)  |
-| `J`        | Target total angular momentum (integer or half-integer, e.g. `1`, `1.5`) |
-| `P`        | Target parity: `+1` or `-1`                      |
+| `J`        | Target total angular momentum (integer or half-integer, e.g. `1`, `0.5`). Optional if `--particles` is given. |
+| `P`        | Target parity: `+1` or `-1`. Optional if `--particles` is given. |
+
+`J` and `P` must either both be given or both be omitted. When omitted, `--particles` is required and the 3 lowest J^P combinations the pair can produce are used automatically.
 
 **Optional arguments:**
 
@@ -50,7 +52,10 @@ threshold-finder mass_min mass_max J P [options]
 
 Only the flags you provide are enforced. Omit a flag to leave that flavor unconstrained. Pairs involving particles with undefined quark content (e.g. η, ω — mixed states like uū+dd̄) are excluded when any flavor flag is set.
 
-`--particles` is a shorthand: instead of computing net quark numbers by hand, provide the two particles whose quantum numbers define the channel of interest. The flavor flags are derived automatically and printed before the results. Explicit `--u/--d/...` flags override the derived values if both are given.
+`--particles` does two things:
+1. **Derives flavor conservation** automatically — no need to compute net quark numbers by hand. Explicit `--u/--d/...` flags override the derived values.
+2. **Checks feasibility** — if J and P are given, the tool first verifies that the specified pair can actually produce that J^P at some L. If not, a warning is printed and no results are shown for that J^P.
+3. **Auto-detects J^P** — if J and P are omitted, the 3 lowest J^P combinations the pair can produce (ordered by minimum L) are determined and each is searched separately.
 
 ### Examples
 
@@ -99,6 +104,38 @@ $ python3 -m threshold_finder.cli 3700 3900 1 -1 --u 0 --d 0 --s 0 --c 0 --b 0 -
   ...
   D0 + D*(2007)~0  threshold=3871.7 MeV  L=1  J^P=1^-
   ...
+```
+
+Omit J and P to auto-detect the 3 lowest J^P combinations D0 + Lambda can produce:
+
+```
+$ threshold-finder 2800 3000 --particles 'D0' 'Lambda' --unique-pairs
+
+Flavor conservation derived from 'D0' + 'Lambda':
+  u = +0
+  d = +1
+  s = +1
+  c = +1
+
+No J^P given — using the 3 lowest combinations 'D0' + 'Lambda' can produce:
+  J^P = 1/2^-  (lowest at L=0)
+  J^P = 1/2^+  (lowest at L=1)
+  J^P = 3/2^+  (lowest at L=1)
+
+Thresholds for J^P = 1/2^-  in [2800.0, 3000.0] MeV  ...
+...
+Thresholds for J^P = 1/2^+  in [2800.0, 3000.0] MeV  ...
+...
+Thresholds for J^P = 3/2^+  in [2800.0, 3000.0] MeV  ...
+...
+```
+
+If the requested J^P cannot be produced by the given pair at any L, a warning is shown and that J^P is skipped:
+
+```
+$ threshold-finder 2800 3000 0.5 +1 --particles 'pi+' 'pi-'
+
+WARNING: 'pi+' + 'pi-' cannot produce J^P = 1/2^+ at any L
 ```
 
 Derive flavor numbers from reference particles (D0 + Lambda defines the channel):
