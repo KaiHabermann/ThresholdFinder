@@ -29,7 +29,7 @@ def _extra_cli_args(args: argparse.Namespace) -> str:
     parts = []
     if args.max_L is not None:
         parts.append(f"--max-L {args.max_L}")
-    if args.charge != 0.0:
+    if args.charge is not None and args.charge != 0.0:
         parts.append(f"--charge {args.charge}")
     if args.status != [0]:
         parts.append("--status " + " ".join(str(s) for s in args.status))
@@ -140,8 +140,8 @@ def main(argv=None):
         help="Maximum orbital angular momentum (default: auto)",
     )
     parser.add_argument(
-        "--charge", type=float, default=0.0,
-        help="Required total charge of the pair (default: 0)",
+        "--charge", type=float, default=None,
+        help="Required total charge of the pair (default: derived from --particles, or 0)",
     )
     parser.add_argument(
         "--status", type=int, nargs="+", default=[0], metavar="S",
@@ -222,8 +222,15 @@ def main(argv=None):
         flavor_filter = FlavorFilter(**{f: merged.get(f) for f in FLAVORS})
 
         from particle import Particle
-        p1_mass = float(Particle.from_name(name1).mass)
-        p2_mass = float(Particle.from_name(name2).mass)
+        _p1 = Particle.from_name(name1)
+        _p2 = Particle.from_name(name2)
+        p1_mass = float(_p1.mass)
+        p2_mass = float(_p2.mass)
+
+        # Derive total charge from the reference pair unless the user set --charge explicitly
+        if args.charge is None:
+            args.charge = float(_p1.charge) + float(_p2.charge)
+
         print(f"Reference pair: '{name1}' + '{name2}'  "
               f"threshold = {p1_mass + p2_mass:.1f} MeV  "
               f"({p1_mass:.1f} + {p2_mass:.1f})")
@@ -235,6 +242,10 @@ def main(argv=None):
         print()
 
         particles = (name1, name2)
+
+    # Fallback: no --particles and no --charge → default charge=0
+    if args.charge is None:
+        args.charge = 0.0
 
     # --- Determine J^P targets ---
     if args.J is not None and args.P is not None:
