@@ -12,6 +12,7 @@ from .lookup import (
     suggest_particles,
     lowest_jp_combinations,
     pair_can_produce,
+    qn_options_for_channel,
 )
 from .result import _fmt_J
 
@@ -35,6 +36,8 @@ def _extra_cli_args(args: argparse.Namespace) -> str:
         parts.append("--status " + " ".join(str(s) for s in args.status))
     if args.unique_pairs:
         parts.append("--unique-pairs")
+    if args.n_body != 2:
+        parts.append(f"--n-body {args.n_body}")
     return " ".join(parts)
 
 
@@ -78,8 +81,8 @@ def _run_for_jp(
     particles: Optional[tuple[str, str]],
 ) -> None:
     """Run ThresholdFinder for one J^P target and print results."""
-    # Check whether the reference pair can produce this J^P at all
-    if particles:
+    # Check whether the reference pair can produce this J^P at all (two-body only)
+    if particles and args.n_body == 2:
         name1, name2 = particles
         if not pair_can_produce(name1, name2, J_target, P_target, args.max_L):
             p_str = "+" if P_target > 0 else "-"
@@ -96,6 +99,7 @@ def _run_for_jp(
         mass_max=args.mass_max,
         J_target=J_target,
         P_target=P_target,
+        n_body=args.n_body,
         max_L=args.max_L,
         total_charge=args.charge,
         flavor_filter=flavor_filter,
@@ -104,10 +108,10 @@ def _run_for_jp(
     result = finder.run()
 
     if args.unique_pairs:
-        seen: dict[tuple[str, str], int] = {}
+        seen: dict[tuple[str, ...], int] = {}
         filtered = []
         for c in sorted(result.combinations, key=lambda x: (x.threshold, x.L)):
-            key = tuple(sorted([c.particle1, c.particle2]))
+            key = tuple(sorted(c.particles))
             if key not in seen:
                 seen[key] = c.L
                 filtered.append(c)
@@ -155,6 +159,10 @@ def main(argv=None):
         "--max-mass-particles", type=float, default=None, metavar="M",
         help="Max mass (MeV) for individual particles to consider (default: mass_max)",
     )
+    parser.add_argument(
+        "--n-body", type=int, default=2, metavar="N",
+        help="Number of particles in the final state (>= 2, default: 2)",
+    )
 
     flavor_group = parser.add_argument_group(
         "flavor conservation",
@@ -178,6 +186,9 @@ def main(argv=None):
     )
 
     args = parser.parse_args(argv)
+
+    if args.n_body < 2:
+        parser.error("--n-body must be >= 2")
 
     # --- Validate: J and P required unless --particles is given ---
     if args.J is None or args.P is None:
@@ -264,6 +275,88 @@ def main(argv=None):
     # --- Run ---
     for J_target, P_target in jp_targets:
         _run_for_jp(J_target, P_target, args, flavor_filter, particles)
+
+
+_QN_OPTIONS_WARNING_THRESHOLD = 25
+
+
+def qn_options_main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="qn-options",
+        description=(
+            "List all L-value combinations that allow a given set of particles "
+            "to produce a target J^P. "
+            "For n particles, each result is a list of n-1 orbital angular momenta "
+            "[L1, L2, ...], where Li couples particle i+1 to the (1..i) subsystem."
+        ),
+    )
+    parser.add_argument("J", type=float, help="Target total angular momentum")
+    parser.add_argument("P", type=parse_parity, help="Target parity: +1 or -1")
+    parser.add_argument(
+        "particles", nargs="+", metavar="PARTICLE",
+        help="Two or more PDG particle names",
+    )
+    parser.add_argument(
+        "--max-L", type=int, default=4, metavar="L",
+        help="Maximum value for each individual Li (default: 4)",
+    )
+
+    args = parser.parse_args(argv)
+
+    if len(args.particles) < 2:
+        parser.error("At least two particle names are required.")
+
+    # Resolve names, print suggestions on failure
+    from particle import Particle, ParticleNotFound
+    not_found = []
+    for name in args.particles:
+        try:
+            Particle.from_name(name)
+        except (ParticleNotFound, KeyError):
+            suggestions = suggest_particles(name, n=5)
+            not_found.append((name, suggestions))
+    if not_found:
+        for name, suggestions in not_found:
+            print(f"ERROR: Unknown particle '{name}'", file=sys.stderr)
+            if suggestions:
+                print(f"Did you mean: {', '.join(suggestions)}?", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        L_tuples = qn_options_for_channel(
+            args.particles, args.J, args.P, args.max_L,
+        )
+    except LookupError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    p_str = "+" if args.P > 0 else "-"
+    n = len(args.particles)
+    channel = " + ".join(args.particles)
+    print(f"J^P = {_fmt_J(args.J)}^{p_str}  channel: {channel}")
+
+    if not L_tuples:
+        print(f"No L combination found (max L per step = {args.max_L}).")
+        return
+
+    if len(L_tuples) > _QN_OPTIONS_WARNING_THRESHOLD:
+        print(
+            f"WARNING: {len(L_tuples)} combinations found — showing only the first "
+            f"{_QN_OPTIONS_WARNING_THRESHOLD}. Use --max-L to restrict the search.",
+            file=sys.stderr,
+        )
+        L_tuples = L_tuples[:_QN_OPTIONS_WARNING_THRESHOLD]
+
+    if n == 2:
+        print(f"{'L':>6}")
+        for (L,) in L_tuples:
+            print(f"  {L:>4}")
+    else:
+        header = "  ".join(f"L{i+1}" for i in range(n - 1))
+        print(f"  {header}")
+        for tup in L_tuples:
+            row = "  ".join(f"{l:>2}" for l in tup)
+            print(f"  {row}")
 
 
 if __name__ == "__main__":

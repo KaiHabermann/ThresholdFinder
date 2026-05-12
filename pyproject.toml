@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thresholds"
-version = "0.3.1"
+version = "0.4.0"
 description = "Find two-body hadronic thresholds compatible with given J^P quantum numbers"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,6 +12,7 @@ dependencies = ["particle>=0.24"]
 
 [project.scripts]
 threshold-finder = "threshold_finder.cli:main"
+qn-options = "threshold_finder.cli:qn_options_main"
 
 [tool.setuptools.packages.find]
 where = ["."]

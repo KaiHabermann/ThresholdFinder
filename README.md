@@ -1,6 +1,6 @@
 # ThresholdFinder
 
-Finds two-body hadronic thresholds compatible with given J^P quantum numbers. Given a mass range and a target J^P, it scans all pairs of PDG hadrons whose combined mass falls in that range and checks whether they can couple — via some orbital angular momentum L — to produce the desired quantum numbers.
+Finds n-body hadronic thresholds compatible with given J^P quantum numbers. Given a mass range and a target J^P, it scans all combinations of PDG hadrons whose combined mass falls in that range and checks whether they can couple — via some total orbital angular momentum L — to produce the desired quantum numbers. The default is two-body; use `--n-body` (or `n_body=` in the API) to search three-body or higher final states.
 
 ## Requirements
 
@@ -37,7 +37,8 @@ threshold-finder mass_min mass_max [J P] [options]
 | `--max-L L`            | auto     | Maximum orbital angular momentum to consider. Without this flag, L is capped automatically at J + J₁ + J₂ + 4 for each pair. |
 | `--charge CHARGE`      | `0`      | Required total electric charge of the two-particle system. |
 | `--status S [S ...]`   | `0`      | PDG status codes to include: `0` = well-established, `1` = evidence but unconfirmed, `2` = omitted from summary tables. |
-| `--unique-pairs`       | off      | Show each particle pair only once (keeping the lowest L), instead of one entry per valid L. |
+| `--unique-pairs`       | off      | Show each particle combination only once (keeping the lowest L), instead of one entry per valid L. |
+| `--n-body N`           | `2`      | Number of particles in the final state (must be >= 2). Default is 2 (two-body). Use 3 for three-body, etc. |
 
 **Flavor conservation flags** (all optional, independent):
 
@@ -193,6 +194,17 @@ Did you mean one of these?
   threshold-finder 2800.0 3000.0 0.5 -1 --particles 'D0' 'Lambda(1520)'
 ```
 
+Find three-body 0⁻ thresholds near 420 MeV (the 3π region):
+
+```
+$ threshold-finder 400 450 0 -1 --n-body 3 --max-L 0 --unique-pairs
+
+Thresholds for J^P = 0^-  in [400.0, 450.0] MeV  (max L = 0)  (3-body)
+Found 2 combination(s):
+  pi- + pi0 + pi+  threshold=414.1 MeV  L=0  J^P=0^-
+  pi0 + pi0 + pi0  threshold=404.9 MeV  L=0  J^P=0^-
+```
+
 Find 2⁺ channels with threshold 500–700 MeV, restricting to L ≤ 2:
 
 ```
@@ -214,6 +226,7 @@ finder = ThresholdFinder(
     mass_max=1100,
     J_target=1,
     P_target=-1,
+    n_body=2,                                # 2 = two-body (default); set 3 for three-body, etc.
     max_L=None,                              # None = automatic
     total_charge=0.0,
     flavor_filter=FlavorFilter(u=0, d=0, s=0, c=0, b=0),  # all net quark numbers = 0
@@ -224,7 +237,23 @@ result = finder.run()
 print(result)  # formatted summary
 
 for c in result.combinations:
-    print(c.particle1, "+", c.particle2, "  L =", c.L, "  threshold =", c.threshold, "MeV")
+    print(" + ".join(c.particles), "  L =", c.L, "  threshold =", c.threshold, "MeV")
+```
+
+Three-body search:
+
+```python
+finder = ThresholdFinder(
+    mass_min=400,
+    mass_max=450,
+    J_target=0,
+    P_target=-1,
+    n_body=3,
+    max_L=0,
+)
+result = finder.run()
+for c in result.combinations:
+    print(" + ".join(c.particles), "  threshold =", c.threshold, "MeV")
 ```
 
 Constrain only specific flavors by omitting the rest:
@@ -237,39 +266,37 @@ flavor_filter=FlavorFilter(c=0)
 flavor_filter=FlavorFilter(s=-1)
 ```
 
-`ThresholdResult` has the fields `J_target`, `P_target`, `mass_min`, `mass_max`, `max_L`, `flavor_filter`, and `combinations` (a list of `CombinationResult`).
+`ThresholdResult` has the fields `J_target`, `P_target`, `mass_min`, `mass_max`, `max_L`, `n_body`, `flavor_filter`, and `combinations` (a list of `CombinationResult`).
 
 Each `CombinationResult` contains:
 
-| Field        | Type    | Description                              |
-|--------------|---------|------------------------------------------|
-| `particle1`  | `str`   | PDG name of the first particle           |
-| `particle2`  | `str`   | PDG name of the second particle          |
-| `mass1`      | `float` | Mass of particle 1 (MeV)                 |
-| `mass2`      | `float` | Mass of particle 2 (MeV)                 |
-| `threshold`  | `float` | Combined threshold mass = m₁ + m₂ (MeV) |
-| `charge1`    | `float` | Charge of particle 1                     |
-| `charge2`    | `float` | Charge of particle 2                     |
-| `J1`, `J2`   | `float` | Spins of the two particles               |
-| `P1`, `P2`   | `int`   | Parities of the two particles            |
-| `L`          | `int`   | Orbital angular momentum                 |
-| `J_total`    | `float` | Total angular momentum (= J_target)      |
-| `P_total`    | `int`   | Total parity (= P_target)                |
-| `identical`  | `bool`  | Whether the two particles are identical  |
+| Field        | Type              | Description                                    |
+|--------------|-------------------|------------------------------------------------|
+| `particles`  | `tuple[str, ...]` | PDG names of all particles in the final state  |
+| `masses`     | `tuple[float, ...]` | Masses of all particles (MeV)                |
+| `charges`    | `tuple[float, ...]` | Charges of all particles                     |
+| `spins`      | `tuple[float, ...]` | J values of all particles                    |
+| `parities`   | `tuple[int, ...]`   | Parities of all particles                    |
+| `threshold`  | `float`           | Sum of all particle masses (MeV)               |
+| `L`          | `int`             | Total orbital angular momentum                 |
+| `J_total`    | `float`           | Total angular momentum (= J_target)            |
+| `P_total`    | `int`             | Total parity (= P_target)                      |
+
+For two-body results the legacy per-particle properties (`particle1`, `particle2`, `mass1`, `mass2`, `charge1`, `charge2`, `J1`, `J2`, `P1`, `P2`, `identical`) are still available as convenience aliases.
 
 ## Physics
 
-The tool checks whether a pair (particle 1 with J₁^P₁, particle 2 with J₂^P₂) in a state of orbital angular momentum L can produce the target J^P:
+The tool checks whether a set of n particles (each with Jᵢ^Pᵢ) in a state of total orbital angular momentum L can produce the target J^P.
 
 **Parity:**
 ```
-P_total = P₁ · P₂ · (-1)^L
+P_total = P₁ · P₂ · … · Pₙ · (-1)^L
 ```
 
-**Angular momentum:** J_total must be reachable by coupling J₁ ⊗ J₂ ⊗ L via the triangle rule.
+**Angular momentum:** J_total must be reachable by sequentially coupling all particle spins J₁ ⊗ J₂ ⊗ … ⊗ Jₙ via the triangle rule, then adding L.
 
-**Identical bosons:** For two identical bosons (e.g. π⁰π⁰), the spatial wave function must be symmetric under exchange, which requires L to be even.
+**Identical bosons (two-body only):** For two identical bosons (e.g. π⁰π⁰), the spatial wave function must be symmetric under exchange, which requires L to be even. For n > 2 this constraint is not enforced (exact symmetrisation of n-body wave functions depends on the full Bose/Fermi statistics of all permutations).
 
-**Flavor conservation:** Net quark numbers are computed as #quark − #antiquark for each flavor (u, d, s, c, b). They are additive: the net quark number of the pair is the sum of the two individual net quark numbers. Setting a flavor to 0 requires the pair to have no net quark content in that flavor (e.g. K⁺K⁻ passes s=0 since K⁺ has s=−1 and K⁻ has s=+1). Particles with mixed or superposition quark content (η, ω, φ, π⁰, …) have undefined quark numbers and are excluded from any result when a flavor constraint is active.
+**Flavor conservation:** Net quark numbers are computed as #quark − #antiquark for each flavor (u, d, s, c, b). They are additive over all n particles in the final state. Setting a flavor to 0 requires the combination to have no net quark content in that flavor. Particles with mixed or superposition quark content (η, ω, φ, π⁰, …) have undefined quark numbers and are excluded from any result when a flavor constraint is active.
 
 Particle data (masses, J, P, charge, quark content) are read from the PDG via the [`particle`](https://github.com/scikit-hep/particle) package. Only hadrons with known mass, J, and P are considered.

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+from itertools import combinations_with_replacement
 from typing import Optional
 
 from particle import Particle
@@ -79,21 +80,12 @@ def load_hadrons(
     return result
 
 
-def get_particle_pairs(
-    particles: list[ParticleInfo],
-    total_charge: Optional[float] = None,
-) -> list[tuple[ParticleInfo, ParticleInfo, bool]]:
-    """Generate all unordered pairs (p1, p2, identical).
-
-    For non-self-conjugate particles we also include (p, pbar) pairs.
-    If total_charge is given, only pairs with that combined charge are returned.
-    """
-    # Build full list including antiparticles
+def _build_full_list(particles: list[ParticleInfo]) -> list[ParticleInfo]:
+    """Expand particle list to include antiparticles, deduplicated by pdgid."""
     full: list[ParticleInfo] = []
     for p in particles:
         full.append(p)
         if not p.is_self_conjugate:
-            # Create antiparticle entry
             try:
                 anti = Particle.from_pdgid(-p.pdgid)
                 if anti.mass is not None:
@@ -110,13 +102,22 @@ def get_particle_pairs(
                     ))
             except Exception:
                 pass
-
-    # Deduplicate by pdgid
     seen: dict[int, ParticleInfo] = {}
     for p in full:
         seen[p.pdgid] = p
-    full = list(seen.values())
+    return list(seen.values())
 
+
+def get_particle_pairs(
+    particles: list[ParticleInfo],
+    total_charge: Optional[float] = None,
+) -> list[tuple[ParticleInfo, ParticleInfo, bool]]:
+    """Generate all unordered pairs (p1, p2, identical).
+
+    For non-self-conjugate particles we also include (p, pbar) pairs.
+    If total_charge is given, only pairs with that combined charge are returned.
+    """
+    full = _build_full_list(particles)
     pairs = []
     for i, p1 in enumerate(full):
         for j, p2 in enumerate(full):
@@ -127,5 +128,89 @@ def get_particle_pairs(
                 continue
             identical = (p1.pdgid == p2.pdgid)
             pairs.append((p1, p2, identical))
-
     return pairs
+
+
+def get_particle_combinations(
+    particles: list[ParticleInfo],
+    n: int,
+    total_charge: Optional[float] = None,
+    mass_min: Optional[float] = None,
+    mass_max: Optional[float] = None,
+) -> list[tuple[ParticleInfo, ...]]:
+    """Generate all unordered n-tuples of particles (with repetition allowed).
+
+    For non-self-conjugate particles antiparticles are included.
+    Charge and mass pruning are applied during generation so invalid tuples
+    are never fully constructed.
+    """
+    if n < 2:
+        raise ValueError("n must be >= 2")
+    full = _build_full_list(particles)
+    # Sort by mass ascending so running mass bounds are tight
+    full_sorted = sorted(full, key=lambda p: p.mass)
+    masses = [p.mass for p in full_sorted]
+    charges = [p.charge for p in full_sorted]
+    result: list[tuple[ParticleInfo, ...]] = []
+    _combine(
+        full_sorted, masses, charges, n,
+        total_charge, mass_min, mass_max,
+        0, [], 0.0, 0.0, result,
+    )
+    return result
+
+
+def _combine(
+    pool: list[ParticleInfo],
+    masses: list[float],
+    charges: list[float],
+    n: int,
+    total_charge: Optional[float],
+    mass_min: Optional[float],
+    mass_max: Optional[float],
+    start: int,
+    current: list[ParticleInfo],
+    mass_so_far: float,
+    charge_so_far: float,
+    result: list[tuple[ParticleInfo, ...]],
+) -> None:
+    remaining = n - len(current)
+
+    if remaining == 0:
+        if total_charge is not None and abs(charge_so_far - total_charge) > 1e-9:
+            return
+        if mass_min is not None and mass_so_far < mass_min - 1e-9:
+            return
+        if mass_max is not None and mass_so_far > mass_max + 1e-9:
+            return
+        result.append(tuple(current))
+        return
+
+    # Mass pruning: pool sorted by mass ascending, so masses[start] is the minimum
+    # mass any remaining pick can contribute.
+    if mass_max is not None and mass_so_far > mass_max + 1e-9:
+        return
+    m_min_per = masses[start] if start < len(masses) else 0.0
+    m_max_per = masses[-1] if masses else 0.0
+    mass_lo = mass_so_far + remaining * m_min_per
+    mass_hi = mass_so_far + remaining * m_max_per
+    if mass_max is not None and mass_lo > mass_max + 1e-9:
+        return
+    if mass_min is not None and mass_hi < mass_min - 1e-9:
+        return
+
+    # Charge pruning: charges are not monotone with the mass-sorted pool,
+    # so we can't use tight bounds here — but we can still prune at the leaf.
+    # (Charge-sorted pruning would require a different pool ordering.)
+
+    for i in range(start, len(pool)):
+        p = pool[i]
+        current.append(p)
+        _combine(
+            pool, masses, charges, n,
+            total_charge, mass_min, mass_max,
+            i, current,
+            mass_so_far + p.mass, charge_so_far + p.charge,
+            result,
+        )
+        current.pop()

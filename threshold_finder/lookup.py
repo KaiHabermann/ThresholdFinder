@@ -9,7 +9,7 @@ from particle import Particle, ParticleNotFound
 from particle.pdgid import is_hadron
 
 from .flavor import parse_quark_content, FLAVORS
-from .qn import j_range, parity
+from .qn import j_range, parity, all_L_tuples
 
 
 @lru_cache(maxsize=1)
@@ -166,6 +166,22 @@ def resolve_flavor_filter_from_particles(
         )
 
     return combined, warnings
+
+
+def qn_options_for_channel(
+    names: list[str],
+    J_target: float,
+    P_target: int,
+    L_max: int,
+) -> list[tuple[int, ...]]:
+    """Return all L-tuples that let the given particles produce J^P.
+
+    Raises LookupError (with suggestions) if any particle name is unknown.
+    """
+    particles = [_resolve(n) for n in names]
+    spins = [float(p.J) for p in particles]
+    parities = [int(p.P) for p in particles]
+    return all_L_tuples(spins, parities, J_target, P_target, L_max)
 
 
 def _build_command(
