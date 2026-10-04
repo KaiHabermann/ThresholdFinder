@@ -5,15 +5,28 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "thresholds"
 version = "0.4.0"
-description = "Find two-body hadronic thresholds compatible with given J^P quantum numbers"
+description = "Find two-body hadronic thresholds compatible with given J^P quantum numbers, plus a Godfrey-Isgur quark-model meson spectrum (port of GIModel.jl)"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["particle>=0.24"]
+dependencies = ["particle>=0.24", "numpy", "scipy"]
+
+[project.optional-dependencies]
+test = ["pytest"]
 
 [project.scripts]
 threshold-finder = "threshold_finder.cli:main"
 qn-options = "threshold_finder.cli:qn_options_main"
+gi-spectrum = "gimodel.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["threshold_finder*"]
+include = ["threshold_finder*", "gimodel*"]
+
+[tool.setuptools.package-data]
+gimodel = ["data/*.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: takes more than ~2 s (deselect with -m \"not slow\")",
+]

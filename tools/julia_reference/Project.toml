@@ -1,0 +1,10 @@
+[deps]
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+GIModel = "7b2df1f2-6404-4fb8-a3f7-191b7dc823e0"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[sources]
+GIModel = {path = "/tmp/claude-1000/-home-kai-Proects-ThresholdFinder/1a610f91-140b-4b71-996c-13080a04cb18/scratchpad/GIModel.jl"}
+
+[compat]
+julia = "1.11"

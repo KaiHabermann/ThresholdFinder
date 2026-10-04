@@ -1,11 +1,17 @@
 # ThresholdFinder
 
+The distribution ships two packages:
+
+- `threshold_finder` (CLIs `threshold-finder`, `qn-options`) finds hadronic thresholds; see below.
+- `gimodel` (CLI `gi-spectrum`) computes Godfrey–Isgur quark-model meson spectra; see [Quark-model spectrum](#quark-model-spectrum-gimodel-gi-spectrum).
+
 Finds n-body hadronic thresholds compatible with given J^P quantum numbers. Given a mass range and a target J^P, it scans all combinations of PDG hadrons whose combined mass falls in that range and checks whether they can couple — via some total orbital angular momentum L — to produce the desired quantum numbers. The default is two-body; use `--n-body` (or `n_body=` in the API) to search three-body or higher final states.
 
 ## Requirements
 
 - Python >= 3.11
 - [`particle`](https://github.com/scikit-hep/particle) >= 0.24
+- `numpy` and `scipy` (for the quark model, `gimodel`)
 
 ```bash
 pip install thresholds
@@ -300,3 +306,157 @@ P_total = P₁ · P₂ · … · Pₙ · (-1)^L
 **Flavor conservation:** Net quark numbers are computed as #quark − #antiquark for each flavor (u, d, s, c, b). They are additive over all n particles in the final state. Setting a flavor to 0 requires the combination to have no net quark content in that flavor. Particles with mixed or superposition quark content (η, ω, φ, π⁰, …) have undefined quark numbers and are excluded from any result when a flavor constraint is active.
 
 Particle data (masses, J, P, charge, quark content) are read from the PDG via the [`particle`](https://github.com/scikit-hep/particle) package. Only hadrons with known mass, J, and P are considered.
+
+## Quark-model spectrum (`gimodel`, `gi-spectrum`)
+
+A Python port of the core of [GIModel.jl](https://github.com/mmikhasenko/GIModel.jl)
+by M. Mikhasenko: the Godfrey–Isgur relativized quark model for meson spectra
+(S. Godfrey and N. Isgur, *Phys. Rev. D* **32**, 189 (1985)).
+
+The port covers the spectrum core: the Table II / Appendix A parameters (bundled
+TOML), the running coupling, the closed-form smeared potentials, the
+finite-difference relativized Hamiltonian, the contact hyperfine, spin-orbit
+(vector and Thomas) and tensor operators, fixed-(L,S,J) channel solves,
+intra-meson mixing (antisymmetric spin-orbit and tensor), and radial-wave
+utilities. It uses the same numerics, conventions and defaults as the Julia
+package. Both radial solvers are ported: the default finite-difference grid
+(`FiniteDifferenceSolver`) and the paper's harmonic-oscillator basis
+(`OscillatorSolver`). Masses agree with GIModel.jl to about 1e-12 GeV on the
+grid and about 1e-14 GeV in the oscillator basis.
+
+It does not include flavour annihilation mixing or the transition operators.
+
+### Python API
+
+```python
+from gimodel import (Meson, compute_spectrum, load_parameters_and_quark_masses,
+                     physical_components, radial_wave, spectrum_levels, spectrum_state,
+                     wave_mean_squares)
+
+params, mq = load_parameters_and_quark_masses()          # bundled GI parameter set
+spec = compute_spectrum(params, Meson.from_table(mq, "c", "c"), levels=spectrum_levels(2))
+print(spec)                                              # table of contributions (GeV)
+
+chi_c1 = spectrum_state(spec, "1^3P_1")
+chi_c1.mass_GeV, chi_c1.central_GeV, chi_c1.spin_orbit_shift_GeV, chi_c1.tensor_shift_GeV
+
+[(c.basis.label, c.coefficient) for c in physical_components(spec, "1^3S_1")]  # J/psi
+wave_mean_squares(radial_wave(spec, "1^1S_0"), 0)       # <r^2> [GeV^-2], <p^2> [GeV^2]
+```
+
+To vary parameters, use `dataclasses.replace`, for example
+`replace(params, potential=replace(params.potential, b=0.19))`. To change the
+grid, use `FiniteDifferenceSolver(ngrid=900, rmax=24.0)`. To switch terms off,
+use `SpinTerms(tensor=False)`.
+
+Units are GeV and GeV⁻¹ throughout.
+
+### Command line: `gi-spectrum`
+
+`gi-spectrum` lists the model's meson states in a mass window. It follows the
+conventions of `threshold-finder` from the same repository: masses are in MeV,
+`J P` are optional positional filters, and it has the same flavour flags,
+`--particles` handling and unknown-name suggestions.
+
+```
+gi-spectrum mass_min mass_max [J P] (--quarks Q QBAR | --u/--d/--s/--c/--b N | --particles P [P ...]) [options]
+```
+
+**Flavour content.** This is required, and you give it in exactly one way:
+
+| Input | Meaning |
+|-------|---------|
+| `--quarks Q QBAR` | Quark and antiquark, from `u d q s c b`, e.g. `--quarks c u` (c ū) or `--quarks c c` (charmonium). This is the only way to request hidden flavour. |
+| `--u/--d/--s/--c/--b N` | Net quark numbers, as in threshold-finder. They must add up to one quark (+1) and one antiquark (−1) of different flavours, e.g. `--c 1 --s -1`. A net-zero input is rejected with a `--quarks` suggestion. |
+| `--particles P [P ...]` | The summed PDG quark content: `D0 pi+` gives c d̄ and `D(s)+` gives c s̄. A single self-conjugate particle uses its own content: `J/psi(1S)` gives c c̄ and `Upsilon(1S)` gives b b̄. Light superpositions (`pi0`, `rho(770)0`) give the light q q̄. Ambiguous content (`eta`, `eta'(958)`, `phi(1020)`, `K(S)0`), net-zero sums such as `D0 D~0`, and anything that isn't one quark plus one antiquark are errors that suggest `--quarks`. Flavour-neutral superpositions in a sum carry no net flavour. As in threshold-finder, explicit `--u/--d/...` flags override the derived values. |
+
+`u` and `d` both map to the model's isospin-averaged light quark `q`. The quark
+is flavour 1 and the antiquark flavour 2. This order only affects the sign of
+mixing angles. For light hidden flavour (q q̄, s s̄) the output notes that
+isoscalar annihilation mixing (η/η′, ω/φ) is not included.
+
+**Options.**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `J P` | – | Filter by J^P. J is an integer (half-integer J is rejected), P is `+1` or `-1`. They must be given together. |
+| `--C {+1,-1}` | – | Filter by C-parity. Only valid for self-conjugate systems. |
+| `--solver {fd,ho}` | `fd` | Finite-difference or harmonic-oscillator solver. If the solver is unavailable, the CLI prints a clean error. |
+| `--nmax N` | `3` | Radial levels per (L, S, J) sector |
+| `--max-L L` | `3` | Highest orbital angular momentum (S P D F; at most 4) |
+| `--params PATH` | bundled | Parameter TOML file |
+| `--details` | off | Mass contributions (central, contact, spin-orbit, tensor, mixing) and mixing components |
+| `--json` | off | Machine-readable output |
+
+P = (−1)^(L+1). C = (−1)^(L+S) is shown only for equal-flavour systems.
+Unequal-flavour ¹L_L/³L_L states are labelled by their dominant component and
+marked as mixtures. If the highest computed level of a relevant sector is still
+below `mass_max`, a warning on stderr suggests a larger `--nmax`. Errors go to
+stderr with a non-zero exit status.
+
+#### Examples
+
+```
+$ gi-spectrum 2900 3200 --quarks c c
+GI spectrum of c c̄  in [2900.0, 3200.0] MeV  (solver = fd, nmax = 3, L = SPDF)
+Parameters: .../gimodel/data/parameters.provisional.toml
+Found 2 state(s):
+  1^1S_0  J^PC=0^-+  mass=2966.7 MeV
+  1^3S_1  J^PC=1^--  mass=3091.0 MeV
+```
+
+```
+$ gi-spectrum 2400 2600 1 +1 --particles 'D(s)+' --details
+Reference particles: 'D(s)+'  ->  c s̄
+GI spectrum of c s̄ for J^P = 1^+  in [2400.0, 2600.0] MeV  (solver = fd, nmax = 3, L = SPDF)
+Parameters: .../gimodel/data/parameters.provisional.toml
+Found 2 state(s):
+  1^1P_1  J^P=1^+  mass=2547.1 MeV  (mixture: 59% 1^1P_1 + 41% 1^3P_1)
+      contributions [MeV]: central=2565.0  contact=-14.7  spin-orbit=+0.0  tensor=+0.0  mixing=-3.2
+      components: +0.7708 1^1P_1, -0.6366 1^3P_1, -0.0200 2^3P_1, +0.0166 2^1P_1
+  1^3P_1  J^P=1^+  mass=2554.1 MeV  (mixture: 59% 1^3P_1 + 41% 1^1P_1)
+      contributions [MeV]: central=2565.5  contact=+5.0  spin-orbit=-30.7  tensor=+11.7  mixing=+2.5
+      components: +0.7708 1^3P_1, +0.6366 1^1P_1, -0.0197 2^1P_1, -0.0162 2^3P_1, +0.0015 3^1P_1, +0.0011 3^3P_1
+```
+
+```
+$ gi-spectrum 3000 3700 --particles 'J/psi(1S)' --C -1
+Reference particles: 'J/psi(1S)'  ->  c c̄
+GI spectrum of c c̄ with C = -  in [3000.0, 3700.0] MeV  (solver = fd, nmax = 3, L = SPDF)
+Parameters: .../gimodel/data/parameters.provisional.toml
+Found 3 state(s):
+  1^3S_1  J^PC=1^--  mass=3091.0 MeV
+  1^1P_1  J^PC=1^+-  mass=3515.1 MeV
+  2^3S_1  J^PC=1^--  mass=3678.8 MeV
+```
+
+```
+$ gi-spectrum 1800 2100 --particles D0 pi+ --max-L 1
+Reference particles: 'D0' + 'pi+'  ->  c d̄
+GI spectrum of c d̄  in [1800.0, 2100.0] MeV  (solver = fd, nmax = 3, L = SP)
+Parameters: .../gimodel/data/parameters.provisional.toml
+Note: u and d map to the isospin-averaged light quark: model system c q̄
+Found 2 state(s):
+  1^1S_0  J^P=0^-  mass=1873.4 MeV
+  1^3S_1  J^P=1^-  mass=2038.0 MeV
+```
+
+```
+$ gi-spectrum 2900 3200 --c 0
+ERROR: Net flavour from the flavour flags is zero (hidden flavour), which the --u/--d/--s/--c/--b numbers cannot specify.
+Give the quark and antiquark explicitly with --quarks, e.g.:
+  gi-spectrum 2900.0 3200.0 --quarks c c
+```
+
+`--json` prints the system, solver, parameter file, filters, notes, warnings
+and, for each state, its label, n, L, S, J, P, C, mass in MeV, mixing
+components and contributions.
+
+### Tests and reference data
+
+`tests/gimodel/` compares the port layer by layer against JSON reference data generated from GIModel.jl (`tests/gimodel/reference/`). `tools/julia_reference/` holds the Julia generator and explains how to regenerate the data.
+
+```bash
+python -m pytest                 # everything
+python -m pytest -m "not slow"   # skip the long Julia cross-checks
+```
