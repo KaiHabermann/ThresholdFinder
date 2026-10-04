@@ -12,6 +12,7 @@ Finds n-body hadronic thresholds compatible with given J^P quantum numbers. Give
 - Python >= 3.11
 - [`particle`](https://github.com/scikit-hep/particle) >= 0.24
 - `numpy` and `scipy` (for the quark model, `gimodel`)
+- [`pdg`](https://pdgapi.lbl.gov/doc/) >= 2026.0, the official PDG Python API (for `gi-spectrum --match`)
 
 ```bash
 pip install thresholds
@@ -387,6 +388,11 @@ isoscalar annihilation mixing (η/η′, ω/φ) is not included.
 | `--params PATH` | bundled | Parameter TOML file |
 | `--details` | off | Mass contributions (central, contact, spin-orbit, tensor, mixing) and mixing components |
 | `--json` | off | Machine-readable output |
+| `--match` | off | Pair each predicted state with PDG mesons (see [PDG matching](#pdg-matching---match)) |
+| `--match-mass-tol MEV` | `50` | Mass tolerance in MeV |
+| `--match-width-frac F` | `0.5` | Widen the tolerance to F·Γ_PDG for broad states |
+| `--match-status S [S ...]` | `0` | PDG status codes to include, with the same codes and default as threshold-finder's `--status`. See [PDG matching](#pdg-matching---match) for how they map onto the PDG API. |
+| `--match-include-uncertain` | off | Also use J/P values the PDG gives in parentheses or as alternatives, and flag those candidates |
 
 P = (−1)^(L+1). C = (−1)^(L+S) is shown only for equal-flavour systems.
 Unequal-flavour ¹L_L/³L_L states are labelled by their dominant component and
@@ -451,6 +457,184 @@ Give the quark and antiquark explicitly with --quarks, e.g.:
 `--json` prints the system, solver, parameter file, filters, notes, warnings
 and, for each state, its label, n, L, S, J, P, C, mass in MeV, mixing
 components and contributions.
+
+#### PDG matching (`--match`)
+
+`--match` pairs every predicted state with existing PDG mesons. The data comes from
+the official [PDG Python API](https://pdgapi.lbl.gov/doc/) (`pdg` package). It
+ships the full PDG database as SQLite and works offline. Unlike the `particle`
+package, it includes states without Monte-Carlo IDs, such as D_s1*(2700),
+D_s1*(2860), D_s3*(2860), χc1(3872), ψ(4230) and the X states. The header names
+the package version and the edition, e.g.
+`PDG data: PDG Python API (pdg 2026.0), 2026 edition`, and JSON gives them
+under `match_settings.source`. `threshold-finder` and `--particles` keep using
+`particle`. The `--match-*` options require `--match`. Without `--match` the output
+is unchanged.
+
+**Data used.** The matcher reads every meson listing from `api.get_particles()`
+(listings whose `data_flags` contain `M`) and every charge state in it
+(`PdgParticle`). For each state it takes:
+
+- the best mass from `best_summary()`. A mass given as a range, e.g. f₀(500) at
+  "400 to 800", uses the midpoint and is flagged. Limits count as unknown.
+- the best width, if the listing has a width entry. Upper limits, e.g. D*(2007)⁰ at
+  "< 2.1", count as unknown. The API's `width` property returns 0 for listings
+  without a width entry, so the matcher doesn't use it.
+- the strings `quantum_J`, `quantum_P`, `quantum_C` and `quantum_I`.
+
+Antiparticles (negative MC IDs or charges, and `Dbar…`/`Kbar…`/`Bbar…` names) are
+skipped.
+
+**Status.** The PDG API has no per-listing status. It only marks values that appear
+in the Summary Tables (`in_summary_table`). `--match-status` uses threshold-finder's
+codes as follows:
+
+| Code | threshold-finder (`particle`) | PDG API |
+|------|-------------------------------|---------|
+| `0` | established | the listing's best mass is in the Summary Tables |
+| `1` | evidence, not confirmed | no counterpart: selects nothing |
+| `2` | omitted from the summary tables | the listing's best mass appears only in the Listings |
+
+In the 2026 edition every meson listing with a usable mass has status 0, so the
+default already includes D_s1*(2700) and ψ(4230). The light-meson "Further States"
+(listing M300, e.g. X(1575), ρ(2000)) exist only as text descriptions without mass,
+J or P data, so they can't be matched.
+
+**Criterion.** A PDG state is a candidate for a prediction if all of these hold:
+
+1. **Mass.** |m_pred − m_PDG| ≤ max(`--match-mass-tol`, `--match-width-frac` · Γ_PDG).
+   The model predicts no widths, so the PDG width only widens the window for broad
+   states. If Γ_PDG is unknown, the mass tolerance is used alone. The output shows the
+   effective tolerance and whether it came from the width (`tol = 0.5·Γ = 74.1`).
+2. **J and P equal.** C must also be equal when both are defined, i.e. the system is
+   self-conjugate and the PDG state has C. States whose J or P is `?` are never
+   matched, e.g. X(3940), K(1630) and D*(2640). Values in parentheses, and
+   alternatives such as f_J(2220)'s `J = 2++ or 4`, count as unknown by default. With
+   `--match-include-uncertain` they are used, with one candidate per alternative, and
+   flagged `uncertain J^P in PDG`. J and P are never inferred from MC-ID digits,
+   because those are a numbering convention, not measured quantum numbers.
+3. **Flavour compatible.** The PDG API has no quark content, so the flavour family
+   comes from the PDG meson naming scheme:
+
+   | PDG name | Family |
+   |----------|--------|
+   | `pi rho omega phi eta f a b h` (`eta^'`, `f_2^'`, …) | light unflavoured |
+   | `K…` | s q̄ |
+   | `D…` / `D_s…` | c q̄ / c s̄ |
+   | `B…` / `B_s…` / `B_c…` | b q̄ / b s̄ / b c̄ |
+   | `eta_c J/psi psi chi_c h_c` | c c̄ |
+   | `eta_b Upsilon chi_b h_b` | b b̄ |
+   | `X(…)` | the PDG section it is listed in (the nearest preceding listing), flagged |
+   | `T…` (four-quark states, e.g. T_cc̄1(3900)⁺ = Z_c) | never a q q̄ partner |
+
+   This is matched against the system, where u and d are the model's averaged light quark q:
+
+   | System | Matches |
+   |--------|---------|
+   | open flavour, e.g. c s̄, c ū | the same pair, up to charge conjugation and isospin partners: c q̄ matches D⁰, D⁺, D*⁰ and D*⁺ |
+   | c c̄, b b̄ | the c c̄ / b b̄ family, including χc1(3872) and ψ(4230) |
+   | q q̄, u ū, d d̄ | light unflavoured I = 1 and I = 0 states |
+   | u d̄, d ū | light unflavoured I = 1 only |
+   | s s̄ | light unflavoured I = 0 states |
+
+   Light isoscalars (I = 0, or I unknown) fit both q q̄ and s s̄. They are flagged
+   **flavour-ambiguous** because isoscalar annihilation mixing isn't modelled.
+
+**Isospin and charge multiplets.** Most charge states share one PDG listing, e.g.
+ρ(770)⁰/⁺, D_0*(2300)⁰/⁺ and K*(892)⁰/⁺. Some don't: D⁰/D⁺, D*(2007)⁰/D*(2010)⁺,
+K⁺/K⁰ and B⁰/B⁺ are separate listings. These are merged when their MC IDs agree up
+to the u/d quark digits (423/413). Members must also share isospin, J and P, which
+keeps π⁰ (I = 1) and η (I = 0) apart. The representative is the neutral member, or
+the lowest MC ID if there is no neutral member. For a multiplet it is shown with the
+charge suffix dropped (`D`, `D^*(2007)`, `rho(770)`), and singletons keep their full
+PDG API name (`omega(782)0`, `D_s1^*(2700)+`). The mass is the **average over the
+charge states**, matching the model's isospin-averaged light quark, so D is 1867.3 MeV
+from D⁰ and D⁺. The width is the average of the known widths. C comes from the
+neutral member. `--details` and JSON list the members.
+
+**Assignment.** Every candidate within tolerance is listed for each prediction,
+ranked by |Δm| (Δ = m_pred − m_PDG). Each J^P(C) group also gets a one-to-one
+assignment from `scipy.optimize.linear_sum_assignment` that minimises the total
+|Δm|. Pairs outside tolerance get a large cost and are dropped afterwards, so the
+assignment first maximises the number of matched pairs. The assignment only uses
+the predictions shown in the window. The table shows the assigned partner
+(`→ chi_c1(1P) 3510.7 MeV (Δ = -2.5)`) or `→ no match`. `--details` lists all
+candidates with Δm, effective tolerance, assignment and flags.
+
+**Unassigned PDG states.** After the table, the section "PDG states in window
+without assigned prediction" lists the compatible states that no prediction took.
+These states pass the flavour rules and the J P / `--C` filter, and their mass lies
+in [mass_min, mass_max] widened by their own tolerance. This helps to spot missing
+levels and exotics. A J^PC that no q q̄ state can have (0⁻⁻, 0⁺⁻, 1⁻⁺, 2⁺⁻, …) is
+flagged `exotic J^PC`, e.g. π₁(1600).
+
+**JSON.** Each state gains a `match` object with `assigned` (or `null`) and
+`candidates`. Each entry has the name, members, `pdg_listing` (e.g. `M182`), status,
+mass, width, J/P/C, isospin, `delta_MeV`, `tolerance_MeV`, `tolerance_source`
+(`mass_tol` or `width`), `flags` and `assigned_to`. The top level gains
+`match_settings`, which holds the tolerances, status, `include_uncertain` and the
+data source, and `unassigned_pdg`. The existing keys are unchanged.
+
+**Data quirks** (2026 edition): φ(2170) lists a charged row with I = 0, which is
+merged into the single φ(2170) entry. Some narrow states have only an upper limit on the width
+(D_s*, D_s0*(2317)) or no width entry (B*), so they use the mass tolerance alone.
+
+```
+$ gi-spectrum 2900 3600 --quarks c c --nmax 2 --max-L 2 --match
+GI spectrum of c c̄  in [2900.0, 3600.0] MeV  (solver = fd, nmax = 2, L = SPD)
+Parameters: .../gimodel/data/parameters.provisional.toml
+PDG match: |m_pred - m_PDG| <= max(50 MeV, 0.5·Γ_PDG), PDG status 0; Δ = m_pred - m_PDG; one-to-one per J^P(C), minimal total |Δ|
+PDG data: PDG Python API (pdg 2026.0), 2026 edition; only listings with known mass, J and P are matched (uncertain J/P count as unknown)
+Found 6 state(s):
+  1^1S_0  J^PC=0^-+  mass=2966.7 MeV  → eta_c(1S) 2984.1 MeV (Δ = -17.4)
+  1^3S_1  J^PC=1^--  mass=3091.0 MeV  → J/psi(1S) 3096.9 MeV (Δ = -5.9)
+  1^3P_0  J^PC=0^++  mass=3442.8 MeV  → chi_c0(1P) 3415.5 MeV (Δ = +27.3)
+  1^3P_1  J^PC=1^++  mass=3508.2 MeV  → chi_c1(1P) 3510.7 MeV (Δ = -2.5)
+  1^1P_1  J^PC=1^+-  mass=3515.1 MeV  → h_c(1P) 3525.4 MeV (Δ = -10.3)
+  1^3P_2  J^PC=2^++  mass=3548.1 MeV  → chi_c2(1P) 3556.2 MeV (Δ = -8.0)
+
+PDG states in window without assigned prediction ([2900.0, 3600.0] MeV widened by each state's tolerance):
+  eta_c(2S)  J^PC=0^-+  mass=3637.8 MeV  Γ=11.6 MeV  tol = 50.0
+```
+
+η_c(2S) is listed because its prediction (2^1S_0 at 3625.4 MeV) lies above the
+window. With `2900 3700` it is assigned, and so is ψ(2S).
+
+```
+$ gi-spectrum 2650 3000 --particles 'D~0' 'K-' --match --match-mass-tol 80
+Reference particles: 'D~0' + 'K-'  ->  s c̄
+GI spectrum of s c̄  in [2650.0, 3000.0] MeV  (solver = fd, nmax = 3, L = SPDF)
+Parameters: .../gimodel/data/parameters.provisional.toml
+PDG match: |m_pred - m_PDG| <= max(80 MeV, 0.5·Γ_PDG), PDG status 0; Δ = m_pred - m_PDG; one-to-one per J^P(C), minimal total |Δ|
+PDG data: PDG Python API (pdg 2026.0), 2026 edition; only listings with known mass, J and P are matched (uncertain J/P count as unknown)
+Found 6 state(s):
+  2^1S_0  J^P=0^-  mass=2674.6 MeV                                      → no match
+  2^3S_1  J^P=1^-  mass=2734.3 MeV                                      → D_s1^*(2700)+ 2714.0 MeV (Δ = +20.3)
+  1^3D_1  J^P=1^-  mass=2898.5 MeV                                      → D_s1^*(2860)+ 2859.0 MeV (Δ = +39.5)
+  1^1D_2  J^P=2^-  mass=2899.9 MeV  (mixture: 61% 1^1D_2 + 39% 1^3D_2)  → no match
+  1^3D_3  J^P=3^-  mass=2916.1 MeV                                      → D_s3^*(2860)+ 2860.5 MeV (Δ = +55.6)
+  1^3D_2  J^P=2^-  mass=2925.4 MeV  (mixture: 61% 1^3D_2 + 39% 1^1D_2)  → no match
+
+PDG states in window without assigned prediction ([2650.0, 3000.0] MeV widened by each state's tolerance):
+  D_s0(2590)+  J^P=0^-  mass=2591.0 MeV  Γ=89.0 MeV  tol = 80.0
+```
+
+```
+$ gi-spectrum 700 850 1 -1 --quarks u u --nmax 1 --max-L 1 --match --details
+...
+Found 1 state(s):
+  1^3S_1  J^PC=1^--  mass=771.2 MeV  → rho(770) 775.2 MeV (Δ = -4.0, tol = 0.5·Γ = 74.1)
+      contributions [MeV]: central=667.1  contact=+104.1  spin-orbit=+0.0  tensor=+0.0  mixing=+0.0
+      components: +1.0000 1^3S_1
+      PDG candidates (by |Δm|):
+        rho(770)     mass=775.2 MeV  Γ=148.2 MeV  Δ=-4.0  tol = 0.5·Γ = 74.1  assigned  (members: rho(770)0, rho(770)+)
+        omega(782)0  mass=782.7 MeV  Γ=8.7 MeV  Δ=-11.5  tol = 50.0  unassigned  [flavour-ambiguous]
+
+PDG states in window without assigned prediction ([700.0, 850.0] MeV widened by each state's tolerance):
+  omega(782)0  J^PC=1^--  mass=782.7 MeV  Γ=8.7 MeV  tol = 50.0  [flavour-ambiguous]
+```
+
+With `--quarks u d` (I = 1) ω(782) is not a candidate.
 
 ### Tests and reference data
 

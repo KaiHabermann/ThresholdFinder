@@ -3,7 +3,9 @@
 Mirrors the conventions of the ``threshold-finder`` CLI (package ``threshold_finder``,
 distribution ``thresholds``), which it reuses for parity parsing, PDG quark-content
 parsing, particle lookup and name suggestions. Both packages ship in the same
-distribution; threshold_finder is imported here only, never by the gimodel core.
+distribution; threshold_finder and particle are imported only here, and the --match modules
+(gimodel.pdg_match, gimodel.pdg_data with the PDG Python API ``pdg``) are loaded only by this
+module, never by the gimodel core.
 
 Masses on the command line and in the output are in MeV; the model works in GeV.
 """
@@ -24,6 +26,9 @@ PROG = "gi-spectrum"
 QUARK_LETTERS = ("u", "d", "q", "s", "c", "b")
 MIXTURE_THRESHOLD = 0.99  # dominant |c|^2 below this marks a state as a mixture in the table
 COMPONENT_CUTOFF = 1e-3  # smallest |c| listed in --details
+MATCH_MASS_TOL_DEFAULT = 50.0  # MeV
+MATCH_WIDTH_FRAC_DEFAULT = 0.5
+MATCH_STATUS_DEFAULT = [0]
 
 
 class CLIError(Exception):
@@ -365,20 +370,107 @@ def _mixture_text(rec: dict) -> str:
     return "mixture: " + " + ".join(f"{100 * w:.0f}% {l}" for l, w in shown)
 
 
-def _format_text(header: list[str], records: list[dict], args) -> str:
+def _short_flag(flag: str) -> str:
+    return "no PDG quark content" if flag.startswith("quark content missing") else flag
+
+
+def _flags_text(flags, short: bool = True) -> str:
+    if not flags:
+        return ""
+    shown = [_short_flag(f) for f in flags] if short else list(flags)
+    return "  [" + "; ".join(shown) + "]"
+
+
+def _tol_text(tol: float, source: str, args) -> str:
+    if source == "width":
+        return f"tol = {args.match_width_frac:g}·Γ = {tol:.1f}"
+    return f"tol = {tol:.1f}"
+
+
+def _assigned_text(cand, args) -> str:
+    if cand is None:
+        return "→ no match"
+    s = cand.state
+    text = f"→ {s.name} {s.mass:.1f} MeV (Δ = {cand.delta:+.1f}"
+    if cand.tolerance_source == "width":
+        text += f", {_tol_text(cand.tolerance, cand.tolerance_source, args)}"
+    return text + ")" + _flags_text(cand.flags)
+
+
+def _fmt_width(width) -> str:
+    if width is None:
+        return "Γ=?"
+    return f"Γ={width:.2g} MeV" if width < 0.05 else f"Γ={width:.1f} MeV"
+
+
+def _pdg_jpc(state, self_conjugate: bool) -> str:
+    C = _fmt_P(state.C) if self_conjugate and state.C is not None else ""
+    return f"{state.J}^{_fmt_P(state.P)}{C}"
+
+
+def _match_details(i: int, matched, owners: dict, records: list[dict], args) -> list[str]:
+    cands = matched.candidates[i]
+    if not cands:
+        return ["      PDG candidates: none within tolerance"]
+    lines = ["      PDG candidates (by |Δm|):"]
+    w_name = max(len(c.state.name) for c in cands)
+    for c in cands:
+        s = c.state
+        owner = owners.get(s)
+        status = ("assigned" if owner == i else
+                  f"assigned to {records[owner]['label']}" if owner is not None else "unassigned")
+        line = (f"        {s.name.ljust(w_name)}  mass={s.mass:.1f} MeV  {_fmt_width(s.width)}  Δ={c.delta:+.1f}  "
+                f"{_tol_text(c.tolerance, c.tolerance_source, args)}  {status}")
+        if len(s.members) > 1:
+            line += f"  (members: {', '.join(s.members)})"
+        lines.append(line + _flags_text(c.flags, short=False))
+    return lines
+
+
+def _unassigned_section(matched, args, self_conjugate: bool) -> list[str]:
+    lines = ["", f"PDG states in window without assigned prediction "
+                 f"([{args.mass_min:.1f}, {args.mass_max:.1f}] MeV widened by each state's tolerance):"]
+    if not matched.unassigned:
+        return lines + ["  none"]
+    w_name = max(len(u.state.name) for u in matched.unassigned)
+    w_jpc = max(len(_pdg_jpc(u.state, self_conjugate)) for u in matched.unassigned)
+    jp_name = "J^PC" if self_conjugate else "J^P"
+    for u in matched.unassigned:
+        s = u.state
+        line = (f"  {s.name.ljust(w_name)}  {jp_name}={_pdg_jpc(s, self_conjugate).ljust(w_jpc)}  "
+                f"mass={s.mass:.1f} MeV  {_fmt_width(s.width)}  {_tol_text(u.tolerance, u.tolerance_source, args)}")
+        if args.details and len(s.members) > 1:
+            line += f"  (members: {', '.join(s.members)})"
+        lines.append(line + _flags_text(u.flags, short=not args.details))
+    return lines
+
+
+def _format_text(header: list[str], records: list[dict], args, matched=None, self_conjugate: bool = False) -> str:
     lines = list(header)
     lines.append(f"Found {len(records)} state(s):")
     if not records:
+        if matched is not None:
+            lines += _unassigned_section(matched, args, self_conjugate)
         return "\n".join(lines)
     w_label = max(len(r["label"]) for r in records)
     w_jpc = max(len(r["JPC"]) for r in records)
     w_mass = max(len(f"{r['mass_MeV']:.1f}") for r in records)
     jp_name = "J^PC" if records[0]["C"] is not None else "J^P"
-    for r in records:
+
+    def row(r):
         line = f"  {r['label'].ljust(w_label)}  {jp_name}={r['JPC'].ljust(w_jpc)}  mass={r['mass_MeV']:{w_mass}.1f} MeV"
         if r["mixture"]:
             line += f"  ({_mixture_text(r)})"
-        lines.append(line.rstrip())
+        return line.rstrip()
+
+    if matched is not None:
+        w_row = max(len(row(r)) for r in records)
+        owners = {c.state: i for i, c in enumerate(matched.assigned) if c is not None}
+    for i, r in enumerate(records):
+        line = row(r)
+        if matched is not None:
+            line = f"{line.ljust(w_row)}  {_assigned_text(matched.assigned[i], args)}"
+        lines.append(line)
         if args.details:
             c = r["contributions_MeV"]
             lines.append(
@@ -389,6 +481,10 @@ def _format_text(header: list[str], records: list[dict], args) -> str:
             comps = [f"{x['coefficient']:+.4f} {x['label']}" for x in r["components"]
                      if abs(x["coefficient"]) >= COMPONENT_CUTOFF]
             lines.append("      components: " + ", ".join(comps))
+            if matched is not None:
+                lines += _match_details(i, matched, owners, records, args)
+    if matched is not None:
+        lines += _unassigned_section(matched, args, self_conjugate)
     return "\n".join(lines)
 
 
@@ -439,6 +535,33 @@ def main(argv=None):
     )
     parser.add_argument("--json", action="store_true", help="Machine-readable JSON output")
 
+    match_group = parser.add_argument_group(
+        "PDG matching",
+        "Pair each predicted state with compatible PDG mesons: same J^P (and C when both are "
+        "defined), compatible flavour, and |m_pred - m_PDG| <= max(MATCH_MASS_TOL, "
+        "MATCH_WIDTH_FRAC * Gamma_PDG).",
+    )
+    match_group.add_argument("--match", action="store_true", help="Match predictions to PDG mesons")
+    match_group.add_argument(
+        "--match-mass-tol", type=float, default=None, metavar="MEV",
+        help=f"Mass tolerance in MeV (default: {MATCH_MASS_TOL_DEFAULT:g})",
+    )
+    match_group.add_argument(
+        "--match-width-frac", type=float, default=None, metavar="F",
+        help=f"Widen the window to F * Gamma_PDG for broad states (default: {MATCH_WIDTH_FRAC_DEFAULT:g})",
+    )
+    match_group.add_argument(
+        "--match-status", type=int, nargs="+", default=None, metavar="S",
+        help="PDG status codes to include (0=established, 1=evidence, 2=omitted). Default: 0. "
+             "With the PDG API data: 0 = mass in the Summary Tables, 2 = mass only in the Listings; "
+             "nothing maps to 1",
+    )
+    match_group.add_argument(
+        "--match-include-uncertain", action="store_true", default=None,
+        help="Also use PDG J/P values that are parenthesised or given as alternatives "
+             "(e.g. J = '2++ or 4'); such candidates are flagged. '?' always counts as unknown",
+    )
+
     flavor_group = parser.add_argument_group(
         "flavour content (required, exactly one way)",
         "u and d both map to the model's isospin-averaged light quark q. "
@@ -472,6 +595,21 @@ def main(argv=None):
         parser.error("--nmax must be >= 1")
     if not 0 <= args.max_L <= max(L_LABELS):
         parser.error(f"--max-L must be between 0 and {max(L_LABELS)}")
+    match_opts = [o for o, v in (("--match-mass-tol", args.match_mass_tol),
+                                 ("--match-width-frac", args.match_width_frac),
+                                 ("--match-status", args.match_status),
+                                 ("--match-include-uncertain", args.match_include_uncertain)) if v is not None]
+    if match_opts and not args.match:
+        parser.error(f"{', '.join(match_opts)} requires --match")
+    if args.match_mass_tol is None:
+        args.match_mass_tol = MATCH_MASS_TOL_DEFAULT
+    if args.match_width_frac is None:
+        args.match_width_frac = MATCH_WIDTH_FRAC_DEFAULT
+    if args.match_status is None:
+        args.match_status = list(MATCH_STATUS_DEFAULT)
+    args.match_include_uncertain = bool(args.match_include_uncertain)
+    if args.match_mass_tol < 0 or args.match_width_frac < 0:
+        parser.error("--match-mass-tol and --match-width-frac must be >= 0")
 
     try:
         system = resolve_system(args, parser, tf_flavor, tf_lookup)
@@ -498,6 +636,16 @@ def main(argv=None):
         key=lambda r: r["mass_MeV"],
     )
 
+    matched = settings = source = pm = None
+    if args.match:
+        from . import pdg_match as pm
+
+        try:
+            settings, source, matched = _run_match(args, system, shown, pm)
+        except CLIError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
+
     if warning:
         print(warning, file=sys.stderr)
 
@@ -520,8 +668,19 @@ def main(argv=None):
             "filter": {"J": args.J, "P": args.P, "C": args.C},
             "notes": notes,
             "warnings": [warning] if warning else [],
-            "states": shown,
+            "states": shown if matched is None else _states_with_match(shown, matched),
         }
+        if matched is not None:
+            out["match_settings"] = {
+                "mass_tol_MeV": settings.mass_tol,
+                "width_frac": settings.width_frac,
+                "status": list(settings.status),
+                "criterion": "|m_pred - m_PDG| <= max(mass_tol, width_frac * width_PDG)",
+                "include_uncertain": args.match_include_uncertain,
+                "source": {"api": "pdg", "package_version": source.package_version,
+                           "edition": source.edition, "citation": source.citation},
+            }
+            out["unassigned_pdg"] = [pm.unassigned_dict(u) for u in matched.unassigned]
         print(json.dumps(out, indent=2, ensure_ascii=False))
         return
 
@@ -544,7 +703,52 @@ def main(argv=None):
         f"Parameters: {params_path}",
     ]
     header += [f"Note: {n}" for n in notes]
-    print(_format_text(header, shown, args))
+    if matched is not None:
+        header.append(
+            f"PDG match: |m_pred - m_PDG| <= max({settings.mass_tol:g} MeV, {settings.width_frac:g}·Γ_PDG), "
+            f"PDG status {' '.join(str(x) for x in settings.status)}; Δ = m_pred - m_PDG; "
+            "one-to-one per J^P(C), minimal total |Δ|"
+        )
+        header.append(f"{source.note}; only listings with known mass, J and P are matched"
+                      + ("" if args.match_include_uncertain else " (uncertain J/P count as unknown)"))
+    print(_format_text(header, shown, args, matched, system.self_conjugate))
+
+
+def _run_match(args, system: System, shown: list[dict], pm):
+    from . import pdg_data
+
+    settings = pm.MatchSettings(args.match_mass_tol, args.match_width_frac, tuple(args.match_status))
+    predictions = [pm.Prediction(r["label"], r["J"], r["P"], r["C"], r["mass_MeV"]) for r in shown]
+    try:
+        entries = pdg_data.load_entries(settings.status, args.match_include_uncertain)
+        source = pdg_data.source_info()
+    except ImportError as exc:
+        raise CLIError(f"--match needs the PDG Python API ('pip install pdg'): {exc}")
+    states = pm.collapse_multiplets(entries)
+    flavour = pm.SystemFlavour.from_quarks(system.quark, system.antiquark)
+
+    def jpc_filter(J: int, P: int, C) -> bool:
+        return _passes({"J": J, "P": P, "C": C}, args)
+
+    window = (args.mass_min, args.mass_max)
+    return settings, source, pm.match(predictions, states, flavour, settings, window, jpc_filter)
+
+
+def _states_with_match(shown: list[dict], matched) -> list[dict]:
+    from .pdg_match import candidate_dict
+
+    owners = {c.state: shown[i]["label"] for i, c in enumerate(matched.assigned) if c is not None}
+    out = []
+    for i, rec in enumerate(shown):
+        assigned = matched.assigned[i]
+        out.append({
+            **rec,
+            "match": {
+                "assigned": None if assigned is None else candidate_dict(assigned, rec["label"]),
+                "candidates": [candidate_dict(c, owners.get(c.state)) for c in matched.candidates[i]],
+            },
+        })
+    return out
 
 
 def _compute(args, system: System):

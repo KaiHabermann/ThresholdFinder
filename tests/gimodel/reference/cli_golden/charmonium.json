@@ -1,0 +1,193 @@
+{
+  "system": {
+    "quark": "c",
+    "antiquark": "c",
+    "label": "c c̄",
+    "model_flavors": [
+      "c",
+      "c"
+    ],
+    "self_conjugate": true,
+    "source": "--quarks"
+  },
+  "solver": "fd",
+  "solver_description": "FiniteDifferenceSolver: ngrid = 450, rmax = 24.0 GeV^-1 (h = 0.05322), relativistic, full, 6 levels/channel",
+  "parameters": "@PARAMS@",
+  "nmax": 2,
+  "max_L": 1,
+  "window_MeV": [
+    2900.0,
+    3600.0
+  ],
+  "filter": {
+    "J": null,
+    "P": null,
+    "C": null
+  },
+  "notes": [],
+  "warnings": [],
+  "states": [
+    {
+      "label": "1^1S_0",
+      "basis_label": "1^1S_0",
+      "n": 1,
+      "L": 0,
+      "S": 0,
+      "J": 0,
+      "P": -1,
+      "C": 1,
+      "JPC": "0^-+",
+      "mass_MeV": 2966.693829785992,
+      "mixture": false,
+      "dominant_weight": 1.0,
+      "components": [
+        {
+          "label": "1^1S_0",
+          "coefficient": 1.0
+        }
+      ],
+      "contributions_MeV": {
+        "central": 3078.365656425718,
+        "contact": -111.6718266397259,
+        "spin_orbit": 0.0,
+        "tensor": 0.0,
+        "mixing": 0.0
+      }
+    },
+    {
+      "label": "1^3S_1",
+      "basis_label": "1^3S_1",
+      "n": 1,
+      "L": 0,
+      "S": 1,
+      "J": 1,
+      "P": -1,
+      "C": -1,
+      "JPC": "1^--",
+      "mass_MeV": 3091.2327985530314,
+      "mixture": false,
+      "dominant_weight": 1.0,
+      "components": [
+        {
+          "label": "1^3S_1",
+          "coefficient": 1.0
+        }
+      ],
+      "contributions_MeV": {
+        "central": 3065.6083504625676,
+        "contact": 25.624448090463776,
+        "spin_orbit": 0.0,
+        "tensor": 0.0,
+        "mixing": 0.0
+      }
+    },
+    {
+      "label": "1^3P_0",
+      "basis_label": "1^3P_0",
+      "n": 1,
+      "L": 1,
+      "S": 1,
+      "J": 0,
+      "P": 1,
+      "C": 1,
+      "JPC": "0^++",
+      "mass_MeV": 3442.764727679444,
+      "mixture": false,
+      "dominant_weight": 1.0,
+      "components": [
+        {
+          "label": "1^3P_0",
+          "coefficient": 1.0
+        }
+      ],
+      "contributions_MeV": {
+        "central": 3534.76122729396,
+        "contact": 3.6927950056951446,
+        "spin_orbit": -71.88201246970624,
+        "tensor": -23.80728215050494,
+        "mixing": 0.0
+      }
+    },
+    {
+      "label": "1^3P_1",
+      "basis_label": "1^3P_1",
+      "n": 1,
+      "L": 1,
+      "S": 1,
+      "J": 1,
+      "P": 1,
+      "C": 1,
+      "JPC": "1^++",
+      "mass_MeV": 3508.15021095386,
+      "mixture": false,
+      "dominant_weight": 1.0,
+      "components": [
+        {
+          "label": "1^3P_1",
+          "coefficient": 1.0
+        }
+      ],
+      "contributions_MeV": {
+        "central": 3523.804316950714,
+        "contact": 2.8486413974730267,
+        "spin_orbit": -28.732806502261724,
+        "tensor": 10.230059107934617,
+        "mixing": 0.0
+      }
+    },
+    {
+      "label": "1^1P_1",
+      "basis_label": "1^1P_1",
+      "n": 1,
+      "L": 1,
+      "S": 0,
+      "J": 1,
+      "P": 1,
+      "C": -1,
+      "JPC": "1^+-",
+      "mass_MeV": 3515.0528096775365,
+      "mixture": false,
+      "dominant_weight": 1.0,
+      "components": [
+        {
+          "label": "1^1P_1",
+          "coefficient": 1.0
+        }
+      ],
+      "contributions_MeV": {
+        "central": 3523.242910094462,
+        "contact": -8.190100416925237,
+        "spin_orbit": 0.0,
+        "tensor": 0.0,
+        "mixing": 0.0
+      }
+    },
+    {
+      "label": "1^3P_2",
+      "basis_label": "1^3P_2",
+      "n": 1,
+      "L": 1,
+      "S": 1,
+      "J": 2,
+      "P": 1,
+      "C": 1,
+      "JPC": "2^++",
+      "mass_MeV": 3548.1367747545887,
+      "mixture": false,
+      "dominant_weight": 1.0,
+      "components": [
+        {
+          "label": "1^3P_2",
+          "coefficient": 1.0
+        }
+      ],
+      "contributions_MeV": {
+        "central": 3524.7810447873094,
+        "contact": 2.208501572708411,
+        "spin_orbit": 22.912201876850684,
+        "tensor": -1.764973482279225,
+        "mixing": 0.0
+      }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+GI spectrum of c c̄  in [2900.0, 3600.0] MeV  (solver = fd, nmax = 2, L = SP)
+Parameters: @PARAMS@
+Found 6 state(s):
+  1^1S_0  J^PC=0^-+  mass=2966.7 MeV
+      contributions [MeV]: central=3078.4  contact=-111.7  spin-orbit=+0.0  tensor=+0.0  mixing=+0.0
+      components: +1.0000 1^1S_0
+  1^3S_1  J^PC=1^--  mass=3091.2 MeV
+      contributions [MeV]: central=3065.6  contact=+25.6  spin-orbit=+0.0  tensor=+0.0  mixing=+0.0
+      components: +1.0000 1^3S_1
+  1^3P_0  J^PC=0^++  mass=3442.8 MeV
+      contributions [MeV]: central=3534.8  contact=+3.7  spin-orbit=-71.9  tensor=-23.8  mixing=+0.0
+      components: +1.0000 1^3P_0
+  1^3P_1  J^PC=1^++  mass=3508.2 MeV
+      contributions [MeV]: central=3523.8  contact=+2.8  spin-orbit=-28.7  tensor=+10.2  mixing=+0.0
+      components: +1.0000 1^3P_1
+  1^1P_1  J^PC=1^+-  mass=3515.1 MeV
+      contributions [MeV]: central=3523.2  contact=-8.2  spin-orbit=+0.0  tensor=+0.0  mixing=+0.0
+      components: +1.0000 1^1P_1
+  1^3P_2  J^PC=2^++  mass=3548.1 MeV
+      contributions [MeV]: central=3524.8  contact=+2.2  spin-orbit=+22.9  tensor=-1.8  mixing=+0.0
+      components: +1.0000 1^3P_2
