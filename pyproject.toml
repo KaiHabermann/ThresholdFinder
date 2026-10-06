@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thresholds"
-version = "0.4.0"
+version = "0.5.0"
 description = "Find two-body hadronic thresholds compatible with given J^P quantum numbers, plus a Godfrey-Isgur quark-model meson spectrum (port of GIModel.jl)"
 readme = "README.md"
 requires-python = ">=3.11"
