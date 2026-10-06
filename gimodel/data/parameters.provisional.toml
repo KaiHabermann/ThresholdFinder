@@ -1,0 +1,71 @@
+[metadata]
+source = "Godfrey-Isgur 1985"
+doi = "10.1103/PhysRevD.32.189"
+page = 5
+table = "Table II"
+status = "reviewed_runtime_preset"
+authority_note = "Runtime preset reviewed against Table II and Appendix A; see the Inputs and parameters documentation page. Historical filename retained for compatibility. The Table II reference transcription lives in GIPaper/data/transcription_parameters.toml."
+
+[masses]
+m_ud_avg_MeV = 220
+m_s_MeV = 419
+m_c_MeV = 1628
+m_b_MeV = 4977
+
+[potential]
+b_GeV2 = 0.18
+c_MeV = -253
+# Which central-potential construction to use (mutually exclusive by design):
+#   "pointwise"                    — raw V = br - 4α_s/(3r) + c diagnostic baseline.
+#   "coulomb_1d_smear"             — 1D Gaussian of G(r) on the mesh only; S(r) pointwise.
+#                                    Same σ as (A9); not (A12)–(A13).
+#   "appendix_a_smearing"          — naive 3D Gaussian (A8) of pointwise G and S with the
+#                                    contact-hyperfine σ (A9); wipes the small-r Coulomb
+#                                    well on a radial grid.
+#   "appendix_a_derivative_g"      — first derivative-expansion term for smeared Coulomb
+#                                    G(r), with S(r) pointwise; modular Appendix-A proxy.
+#   "appendix_a_closed_form"       — closed-form Gaussian smearing of G(r) and S(r) via
+#                                    the checked (A12)–(A14) τ_k and smeared-linear
+#                                    formulas; diagonal only (no G' momentum sandwich).
+#   "appendix_a_momentum_sandwich" — active reproduction path: closed-form G~, S~, plus
+#                                    the nonlocal Coulomb momentum sandwich A(p) G~ A(p),
+#                                    A(p) = sqrt(1 + p^2/(E1 E2)), on the FD basis.
+central = "appendix_a_momentum_sandwich"
+
+[relativistic_smearing]
+sigma0_GeV = 1.80
+s = 1.55
+
+[relativistic_factors]
+epsilon_c = -0.168
+epsilon_t = 0.025
+epsilon_so_vector = -0.035
+epsilon_so_scalar = 0.055
+# Appendix A15: apply the GI momentum-dependent factor as a Hermitian sandwich
+# around the exact Laplacian contact operator.
+contact_momentum_sandwich = true
+# Appendix A15-A16: apply the GI Hermitian momentum-factor sandwiches to the
+# vector/scalar spin-orbit and tensor operators. Both diagonal fixed-sector
+# terms and unequal-mass antisymmetric mixing use this prescription.
+fine_structure_momentum_sandwich = true
+# Use derivatives of the closed-form smeared Coulomb G~ and confinement S~:
+# A15 uses dG/dr and d²G/dr²; A16 uses dS/dr without duplicating Coulomb.
+fine_structure_smeared_kernels = true
+
+[fine_structure]
+# Appendix-A vector + scalar spin–orbit and tensor operators. Their strengths
+# are fixed by Eqs. (A15)-(A16); this section contains only the master switch.
+enabled = true
+
+[annihilation]
+# Paper Table III pseudoscalar model constants.
+# P1 uses Eq. (18a): A_np exp[-(m_i^2+m_j^2)/m_eta^2] plus the perturbative term.
+p1_A_np = 0.50
+p1_m_eta_GeV = 0.548
+# P2 uses Eq. (18b): a mass-dependent nonperturbative term with zero at M0.
+p2_A_np = 0.55
+p2_M0_GeV = 1.17
+# Table III A(^3S_1) amplitude for general isoscalar vector annihilation Eq. (16).
+s1_A = 2.5
+# Table III A(^3P_2) amplitude for the f2/f2' tensor-channel annihilation Eq. (16).
+a_3p2 = -0.8

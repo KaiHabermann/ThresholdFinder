@@ -1,0 +1,7 @@
+Reference particles: 'D0' + 'pi+'  ->  c d̄
+GI spectrum of c d̄  in [1800.0, 2100.0] MeV  (solver = fd, nmax = 1, L = SP)
+Parameters: @PARAMS@
+Note: u and d map to the isospin-averaged light quark: model system c q̄
+Found 2 state(s):
+  1^1S_0  J^P=0^-  mass=1873.4 MeV
+  1^3S_1  J^P=1^-  mass=2038.0 MeV
